@@ -502,6 +502,8 @@ func _on_ipc(message: String) -> void:
 			_on_pick(data)
 		"result":
 			_on_result(data)
+		"blocked":  # a click over the map that a page element took (play-client.js): which one, for bug reports
+			print("Play: click went to page element ", str(data.get("el", "?")))
 
 
 func _on_key(key: String) -> void:
@@ -527,7 +529,7 @@ func _on_pick(data: Dictionary) -> void:
 	var mods: Dictionary = data.get("mods", {})
 	match str(data.get("phase")):
 		"down":
-			var id := token_at(pos)
+			var id := token_at(pos, _godot_button(int(data.get("button", 0))) == MOUSE_BUTTON_LEFT)
 			_drag = {"down": true, "pos": pos, "last": pos, "button": _godot_button(int(data.get("button", 0))), "token": id,
 				"moved": false, "mods": mods, "t0": Time.get_ticks_msec() / 1000.0, "kind": ""}
 		"move":
@@ -602,7 +604,7 @@ func _drag_end(pos: Vector2) -> void:
 
 
 func _click(pos: Vector2, button: int, mods: Dictionary) -> void:
-	var id := token_at(pos)
+	var id := token_at(pos, button == MOUSE_BUTTON_LEFT)
 	if button == MOUSE_BUTTON_LEFT:
 		if id != "":
 			_call("godotPlay.control(%s, {releaseOthers: %s})" % [JSON.stringify(id), "false" if mods.get("shift", false) else "true"])
@@ -757,16 +759,17 @@ func _token_center(id: String) -> Vector3:
 	return node.global_position if node else Vector3.ZERO
 
 
-## The token under a screen point: the closest one whose upright column (footprint wide, as tall as wide) the
-## view ray passes through; nearest to the camera wins. "" for none.
-func token_at(pos: Vector2) -> String:
+## The token under a screen point: one whose upright column (footprint wide, as tall as the token looks) the view
+## ray passes through; nearest to the camera wins. With `prefer_own`, the player's own token wins over nearer ones
+## (an NPC standing in front must not stop you grabbing yours). "" for none.
+func token_at(pos: Vector2, prefer_own := false) -> String:
 	if main.info == null:
 		return ""
 	var cam: Camera3D = main.orbit.camera
 	var from := cam.project_ray_origin(pos)
 	var to := from + cam.project_ray_normal(pos) * 5000.0
 	var best := ""
-	var best_depth := INF
+	var best_rank := [INF, INF]  # [not owned (when preferring own), depth]
 	for id in main.tokens._tokens:
 		var entry: Dictionary = main.tokens._tokens[id]
 		var node: Node3D = entry.node
@@ -775,11 +778,23 @@ func token_at(pos: Vector2) -> String:
 		var t: Dictionary = entry.data
 		var radius: float = main.info.px_to_m(minf(float(t.get("widthPx", 100)), float(t.get("heightPx", 100)))) / 2.0
 		var base := node.global_position
-		var pts := Geometry3D.get_closest_points_between_segments(from, to, base, base + Vector3.UP * radius * 2.0)
+		var height := maxf(radius * 2.0, _visual_top(node) - base.y)
+		var pts := Geometry3D.get_closest_points_between_segments(from, to, base, base + Vector3.UP * height)
 		if pts[0].distance_to(pts[1]) <= radius:
-			var depth := from.distance_to(pts[0])
-			if depth < best_depth:
-				best_depth = depth
+			var rank := [0.0 if (t.get("owner", false) or not prefer_own) else 1.0, from.distance_to(pts[0])]
+			if rank[0] < best_rank[0] or (rank[0] == best_rank[0] and rank[1] < best_rank[1]):
+				best_rank = rank
 				best = id
 	return best
+
+
+## The top of what a token shows (a standee can be taller than wide), world y.
+static func _visual_top(node: Node3D) -> float:
+	var top := node.global_position.y
+	for child in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh: MeshInstance3D = child
+		if mesh.mesh and mesh.is_visible_in_tree():
+			var box := mesh.global_transform * mesh.get_aabb()
+			top = maxf(top, box.end.y)
+	return top
 
