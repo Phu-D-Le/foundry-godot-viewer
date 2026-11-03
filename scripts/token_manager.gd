@@ -13,6 +13,7 @@ const VisualBuilder = preload("res://scripts/visual_builder.gd")
 const HitReaction = preload("res://scripts/hit_reaction.gd")
 const HitStyles = preload("res://scripts/hit_styles.gd")
 const TokenStatus = preload("res://scripts/token_status.gd")
+const TokenStrain = preload("res://scripts/token_strain.gd")
 const TokenTarget = preload("res://scripts/token_target.gd")
 
 ## A token took a heavy hit (severity 0..1, "full" hit reactions only): main.gd shakes the camera.
@@ -104,6 +105,7 @@ func upsert(t: Dictionary, animate := true, live_position := false) -> Node3D:
 	if t.has("downed"):
 		set_downed(t.id, bool(t.downed), not is_new)
 	TokenStatus.apply(node, t.get("statuses", []), t.get("effects", []), loader, style)
+	TokenStrain.apply(node, t.get("strain"))  # the Overwhelmed module's Strain bar
 	TokenTarget.apply(node, t, info)  # Foundry's target arrows (yours) and pips (other users')
 	entry.status_gray = "unconscious" in t.get("statuses", [])
 	_refresh_gray(entry, not is_new)
@@ -541,6 +543,7 @@ func _load_visual(node: Node3D, t: Dictionary, style: String) -> void:
 	if saturation < 1.0:  # still downed
 		HitReaction.set_saturation(HitReaction.surfaces(node), saturation)
 	TokenStatus.reapply(node)  # condition tints and fades on the new surfaces
+	TokenStrain.reapply(node)
 	# Hurt image: fetched now, so a hit can show it at once.
 	if t.get("hurtImg") is String and style != "model":
 		var hurt: Texture2D = await loader.fetch_texture(t.hurtImg)
