@@ -1,0 +1,11 @@
+# Only what a player needs to run the viewer
+/*
+!/.gitignore
+!/project.godot
+!/main.tscn
+!/viewer.cfg
+!/scripts/
+!/launcher/
+!/addons/
+!/Foundry Godot Viewer.exe
+*.md

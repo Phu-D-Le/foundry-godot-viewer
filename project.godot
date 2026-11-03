@@ -1,0 +1,95 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Foundry Godot Viewer"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
+
+[shader_globals]
+
+see_cut_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_6={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_7={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_cam={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_a_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_a_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_a_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_a_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_b_0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_b_1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_b_2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+see_cut_path_b_3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
