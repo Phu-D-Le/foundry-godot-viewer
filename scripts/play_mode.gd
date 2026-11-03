@@ -22,6 +22,10 @@ const RIGHT_DOUBLE := 0.4  # seconds between two right-clicks on a token for a d
 const LOAD_WAIT := 10.0  # seconds for Foundry's page to start loading before the viewer says something is wrong
 const WEBVIEW2_URL := "https://go.microsoft.com/fwlink/p/?LinkId=2124703"  # Microsoft's Evergreen installer
 const WEBVIEW2_ID := "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+## The page has the keyboard, on Foundry's login page too (no play client there yet): it passes F2 on itself.
+const F2_LISTENER := """if (!window.__godotF2) { window.__godotF2 = true;
+	addEventListener("keydown", e => { if (e.code === "F2" && !e.repeat) { e.preventDefault();
+		window.ipc.postMessage(JSON.stringify({type: "key", key: "F2"})); } }, true); }"""
 
 var main: Node  # main.gd
 ## Play mode on (web layer shown, the play client feeds the viewer).
@@ -298,7 +302,9 @@ func _make_web() -> void:
 		print("Play: page loading ", web.get("url") if web else ""))
 	web.connect("page_load_finished", func(_a = null) -> void:
 		_page_seen = true
-		print("Play: page loaded"))
+		print("Play: page loaded")
+		if web:
+			web.call("eval", F2_LISTENER))
 	web.visible = true
 	_web_layer.add_child(web)
 	print("Play: web layer opened for %s" % _url)
@@ -506,6 +512,8 @@ func _on_key(key: String) -> void:
 			_toggle_window()
 		"F3":
 			_perf.visible = not _perf.visible
+		"F2":
+			_ask_address.call_deferred()  # not inside the page's own message
 		"KeyT":
 			var id := token_at(_pointer)
 			if id != "":
