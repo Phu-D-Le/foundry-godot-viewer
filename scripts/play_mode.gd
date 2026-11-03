@@ -6,6 +6,7 @@ extends Node
 ## (its `godotPlay` API, called with eval).
 ##   Ctrl+`  play <-> dev mode (dev: the web layer hides; the viewer as before, fed by a GM browser)
 ##   F11     window (the default) <-> full screen (a borderless full window)          F3  performance overlay
+##   F2      change the Foundry address (while the page isn't showing)
 ## In the 3D view: left-click a token = select, drag your token = move (Shift: no grid snap), drag elsewhere =
 ## orbit, right/middle-drag = pan, wheel = zoom, right-click = token HUD (yours), double
 ## right-click = target (config on yours, as in Foundry), T = target
@@ -18,6 +19,9 @@ const DEFAULT_URL := "http://localhost:30000"
 const DRAG_START_PX := 6.0
 const PING_HOLD := 0.6  # seconds held still for a ping
 const RIGHT_DOUBLE := 0.4  # seconds between two right-clicks on a token for a double right-click
+const LOAD_WAIT := 10.0  # seconds for Foundry's page to start loading before the viewer says something is wrong
+const WEBVIEW2_URL := "https://go.microsoft.com/fwlink/p/?LinkId=2124703"  # Microsoft's Evergreen installer
+const WEBVIEW2_ID := "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
 
 var main: Node  # main.gd
 ## Play mode on (web layer shown, the play client feeds the viewer).
@@ -47,6 +51,7 @@ var _measure_wait := 0.0
 var _grid: DragGrid  # Foundry's grid around the pointer while dragging a token
 var _last_right := {}  # the last right-click on a token: {id, t}
 var last_call := ""  # the last godotPlay call (tests read it; nothing runs without the web layer)
+var _page_seen := false  # the current web layer started loading a page
 
 
 func start() -> void:
@@ -87,7 +92,52 @@ func start() -> void:
 	if _url == "":
 		_ask_address()
 	else:
-		_open()
+		_connect()
+
+
+## The address is checked before the web layer opens: a wrong one (or the GM's Foundry being off) brings back the
+## address panel instead of an empty view.
+func _connect() -> void:
+	_say("Connecting to %s ..." % _url, 8.0)
+	var problem := await _probe(_url)
+	if problem != "":
+		print("Play: can't reach %s (%s)" % [_url, problem])
+		_ask_address("Couldn't reach %s (%s).\nCheck the address, and that the GM's Foundry is running." % [_url, problem])
+		return
+	_open()
+
+
+## "" when something answers at the address, otherwise why not.
+func _probe(url: String) -> String:
+	var http := HTTPRequest.new()
+	http.timeout = 8.0
+	http.set_tls_options(TLSOptions.client_unsafe())  # only "is it there": a self-signed certificate is the page's business
+	add_child(http)
+	if http.request(url + "/join", [], HTTPClient.METHOD_HEAD) != OK:
+		http.queue_free()
+		return "not a web address"
+	var result: Array = await http.request_completed
+	http.queue_free()
+	match int(result[0]):
+		HTTPRequest.RESULT_SUCCESS:
+			return ""
+		HTTPRequest.RESULT_TIMEOUT:
+			return "no answer"
+		HTTPRequest.RESULT_CANT_RESOLVE:
+			return "unknown name"
+		_:
+			return "connection refused or blocked"
+
+
+## The web layer (WebView2) needs Microsoft's runtime: Windows 11 has it, some Windows 10 PCs don't.
+func _webview2_installed() -> bool:
+	for key in ["HKLM\\SOFTWARE\\WOW6432Node\\Microsoft\\EdgeUpdate\\Clients\\" + WEBVIEW2_ID,
+			"HKLM\\SOFTWARE\\Microsoft\\EdgeUpdate\\Clients\\" + WEBVIEW2_ID,
+			"HKCU\\Software\\Microsoft\\EdgeUpdate\\Clients\\" + WEBVIEW2_ID]:
+		var out := []
+		if OS.execute("reg", ["query", key, "/v", "pv"], out) == 0 and not "0.0.0.0" in str(out):
+			return true
+	return false
 
 
 ## Laptops with two GPUs: Windows may run the web layer (WebView2) on the integrated GPU while Godot uses the
@@ -135,8 +185,15 @@ func _set_gpu_preference() -> void:
 		OS.execute("reg", ["add", GPU_KEY, "/v", exe, "/t", "REG_SZ", "/d", "GpuPreference=2;", "/f"])
 
 
-## First run: where the Foundry server is (a Godot panel; the web layer doesn't exist yet).
-func _ask_address() -> void:
+## Where the Foundry server is (a Godot panel, no web layer meanwhile): on the first run, with F2, or with what
+## went wrong (`problem`) when the address can't be reached or the page didn't open.
+func _ask_address(problem := "", webview_help := false) -> void:
+	if web:
+		web.queue_free()
+		web = null
+	var old := _ui.get_node_or_null("FirstRun")
+	if old:
+		old.free()
 	set_play(false, false)
 	main._hud.visible = false
 	var panel := PanelContainer.new()
@@ -152,8 +209,20 @@ func _ask_address() -> void:
 	var hint := Label.new()
 	hint.text = "The address you open Foundry at in your browser (ask your GM)."
 	box.add_child(hint)
+	if problem != "":
+		var trouble := Label.new()
+		trouble.text = problem
+		trouble.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		trouble.custom_minimum_size = Vector2(520, 0)  # wraps at the panel's width, not one word a line
+		trouble.add_theme_color_override("font_color", Color(1.0, 0.62, 0.4))
+		box.add_child(trouble)
+	if webview_help:
+		var get_runtime := Button.new()
+		get_runtime.text = "Get Microsoft WebView2 Runtime (free), install it, then press Play"
+		get_runtime.pressed.connect(func() -> void: OS.shell_open(WEBVIEW2_URL))
+		box.add_child(get_runtime)
 	var field := LineEdit.new()
-	field.text = DEFAULT_URL
+	field.text = _url if _url != "" else DEFAULT_URL
 	field.select_all_on_focus = true
 	box.add_child(field)
 	var go := Button.new()
@@ -163,7 +232,9 @@ func _ask_address() -> void:
 	dev.text = "Dev mode (viewer fed by a GM browser)"
 	box.add_child(dev)
 	_ui.add_child(panel)
-	panel.position = (get_viewport().get_visible_rect().size - Vector2(540, 160)) / 2.0
+	panel.reset_size()
+	panel.position = (get_viewport().get_visible_rect().size - panel.size) / 2.0
+	_note.modulate.a = 0.0  # "Connecting ..." is over
 	field.grab_focus()
 	var submit := func(_t := "") -> void:
 		_url = field.text.strip_edges().trim_suffix("/")
@@ -172,7 +243,7 @@ func _ask_address() -> void:
 		_cfg.set_value("foundry", "url", _url)
 		_cfg.save(CONFIG_PATH)
 		panel.queue_free()
-		_open()
+		_connect()
 	field.text_submitted.connect(submit)
 	go.pressed.connect(submit)
 	dev.pressed.connect(func() -> void:
@@ -211,8 +282,32 @@ func _make_web() -> void:
 	web.set("url", _url + "/join")  # Foundry goes on to /game when already logged in
 	web.set_anchors_preset(Control.PRESET_FULL_RECT)
 	web.connect("ipc_message", _on_ipc)
+	_page_seen = false
+	web.connect("page_load_started", func(_a = null) -> void:
+		_page_seen = true
+		print("Play: page loading ", web.get("url") if web else ""))
+	web.connect("page_load_finished", func(_a = null) -> void:
+		_page_seen = true
+		print("Play: page loaded"))
 	web.visible = true
 	_web_layer.add_child(web)
+	print("Play: web layer opened for %s" % _url)
+	_watch_page(web)
+
+
+## A web layer that never starts loading a page leaves only the 3D view: say why instead.
+func _watch_page(view: Control) -> void:
+	await get_tree().create_timer(LOAD_WAIT).timeout
+	if view != web or _page_seen:
+		return
+	var runtime := _webview2_installed()
+	print("Play: Foundry's page didn't open in %d s (WebView2 runtime %s)" % [LOAD_WAIT, "found" if runtime else "missing"])
+	if runtime:
+		_ask_address("Foundry's page didn't open. Press Play to try again. If it keeps failing, reinstall Microsoft " +
+			"WebView2 Runtime below and restart the viewer.", true)
+	else:
+		_ask_address("Foundry's page can't open: this PC is missing Microsoft WebView2 Runtime, which the viewer " +
+			"uses to show Foundry. Install it, then press Play.", true)
 
 
 ## Play (web layer on top, the play client feeds the viewer) or dev mode (the viewer as before).
@@ -255,8 +350,8 @@ func _input(event: InputEvent) -> void:
 	if not available or not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	if event.keycode == KEY_QUOTELEFT and event.ctrl_pressed:
-		if web == null and _url == "":
-			return  # still on the first-run panel
+		if web == null and (_url == "" or _ui.get_node_or_null("FirstRun")):
+			return  # on the address panel
 		if web == null:
 			_open()
 		else:
@@ -267,6 +362,9 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event.keycode == KEY_F3:
 		_perf.visible = not _perf.visible
+	elif event.keycode == KEY_F2 and _ui.get_node_or_null("FirstRun") == null:
+		_ask_address()  # reaches Godot only while the page doesn't have the keyboard
+		get_viewport().set_input_as_handled()
 
 
 ## Window <-> full screen. The web layer is rebuilt after the resize (it would lose its see-through background);
