@@ -61,6 +61,10 @@ func start() -> void:
 	if not available:
 		main.server.active_role = ""  # as before play mode: any Foundry client feeds the viewer
 		return
+	# Which update this copy runs (the launcher's version.txt), so a player can tell at a glance
+	var version := FileAccess.get_file_as_string("res://version.txt").strip_edges().left(7)
+	get_window().title = "Foundry Godot Viewer · " + (version if version != "" else "dev")
+	print("Play: version ", version if version != "" else "dev")
 	_ui = CanvasLayer.new()
 	_ui.name = "PlayUI"
 	_ui.layer = 5
