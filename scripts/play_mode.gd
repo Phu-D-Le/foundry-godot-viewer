@@ -15,7 +15,7 @@ extends Node
 
 const DragGrid = preload("res://scripts/drag_grid.gd")
 const CONFIG_PATH := "user://play.cfg"
-const DEFAULT_URL := "http://localhost:30000"
+const DEFAULT_URL := "http://66.69.152.184:30000"  # the GM's Foundry; also tried when a saved address doesn't answer
 const DRAG_START_PX := 6.0
 const PING_HOLD := 0.6  # seconds held still for a ping
 const RIGHT_DOUBLE := 0.4  # seconds between two right-clicks on a token for a double right-click
@@ -100,6 +100,12 @@ func start() -> void:
 func _connect() -> void:
 	_say("Connecting to %s ..." % _url, 8.0)
 	var problem := await _probe(_url)
+	if problem != "" and _url != DEFAULT_URL and await _probe(DEFAULT_URL) == "":
+		print("Play: %s doesn't answer (%s); using %s" % [_url, problem, DEFAULT_URL])
+		_url = DEFAULT_URL  # a mistyped or old address: the GM's own one works
+		_cfg.set_value("foundry", "url", _url)
+		_cfg.save(CONFIG_PATH)
+		problem = ""
 	if problem != "":
 		print("Play: can't reach %s (%s)" % [_url, problem])
 		_ask_address("Couldn't reach %s (%s).\nCheck the address, and that the GM's Foundry is running." % [_url, problem])
