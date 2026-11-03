@@ -9,3 +9,7 @@
 !/addons/
 !/Foundry Godot Viewer.exe
 *.md
+# A player's copy: what the launcher's last update installed
+/version.txt
+/files.txt
+*.old

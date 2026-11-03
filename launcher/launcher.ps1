@@ -15,6 +15,7 @@ param(
 
 $LauncherPort = $Port
 $ViewerPort = 8765
+$GodotGiven = [bool]$Godot
 
 if (-not $Project) { $Project = Split-Path $PSScriptRoot -Parent }
 if (-not $Godot) {
@@ -51,8 +52,15 @@ function Invoke-Launch {
   # The viewer takes a few seconds to open its port; don't start a second copy meanwhile.
   if (((Get-Date) - $script:launchedAt).TotalSeconds -lt 15) { return @{ launched = $false; viewer = $true } }
   $script:launchedAt = Get-Date
-  $process = Start-Process -FilePath $Godot -ArgumentList @("--path", "`"$Project`"") -PassThru
-  Write-Host "launcher: started $Godot --path $Project (pid $($process.Id))"
+  # Through the double-click launcher when it's there, so a portable copy updates itself first.
+  $exe = Join-Path $Project "Foundry Godot Viewer.exe"
+  if (-not $GodotGiven -and (Test-Path $exe)) {
+    $process = Start-Process -FilePath $exe -PassThru
+    Write-Host "launcher: started $exe (pid $($process.Id))"
+  } else {
+    $process = Start-Process -FilePath $Godot -ArgumentList @("--path", "`"$Project`"") -PassThru
+    Write-Host "launcher: started $Godot --path $Project (pid $($process.Id))"
+  }
   return @{ launched = $true; viewer = $true; pid = $process.Id }
 }
 
